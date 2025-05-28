@@ -1,6 +1,7 @@
 import React from "react";
 import { Peer } from "peerjs";
 import { useState, useEffect, useRef } from "react";
+import QRCode from "react-qr-code";
 
 const Receive = () => {
   const [peer, setPeer] = useState("Connecting...");
@@ -129,8 +130,9 @@ const Receive = () => {
         {/* Peer ID Section */}
         <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
           <h1 className="text-2xl font-bold mb-4">Receive Files & Messages</h1>
-          <div className="flex items-center gap-4">
-            <span className="text-sm">Your ID:</span>
+          <div className="flex flex-col items-center gap-4">
+            <div>
+            <span className="text-sm m-2">Your ID:</span>
             <input
               type="text"
               value={peer}
@@ -139,10 +141,18 @@ const Receive = () => {
             />
             <button
               onClick={copyToClipboard}
-              className="px-4 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors relative"
+              className="px-4 m-2 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors relative"
             >
               {copyStatus || "Copy ID"}
             </button>
+            </div>
+            <QRCode
+            size={64}
+            style={{ height: "auto", maxWidth: "40%", width: "40%" }}
+            value={'HI'}
+            viewBox={`0 0 256 256`}
+            level={'L'}/>
+            
           </div>
           <div className="mt-2 text-sm">
             Status:{" "}

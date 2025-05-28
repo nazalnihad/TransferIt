@@ -1,6 +1,7 @@
 import React from "react";
 import { Peer } from "peerjs";
 import { useState, useEffect, useRef } from "react";
+import QRScanner from "../utils/QRScanner";
 
 const Send = () => {
   const [peer, setPeer] = useState("Connecting...");
@@ -140,26 +141,29 @@ const Send = () => {
     <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-4">
       <div className="w-full max-w-3xl space-y-6">
         {/* Connection Section */}
-        <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
+        <div className="bg-gray-800 p-4 sm:p-6 rounded-lg shadow-lg">
           <h1 className="text-2xl font-bold mb-4">Send Files & Messages</h1>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4 space-y-4 sm:space-y-0">
             <input
               type="text"
               value={receiverId}
               onChange={(e) => setReceiverId(e.target.value)}
               placeholder="Enter receiver's peer ID"
-              className="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              onKeyPress={(e) => e.key === 'Enter' && handleConnect()}
+              className="w-full sm:flex-1 p-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
             />
             <button
               onClick={handleConnect}
-              className="px-4 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+              className="w-full sm:w-auto px-4 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
             >
               Connect
             </button>
+            <div className="w-full sm:w-auto">
+              <QRScanner onScan={(data) => setReceiverId(data)} />
+            </div>
           </div>
           <div className="mt-4 text-sm">
-            Your ID: <span className="font-mono">{peer}</span>
+            Your ID: <span className="font-mono break-all">{peer}</span>
           </div>
           <div className="mt-2 text-sm">
             Status: <span className={`font-mono ${getStatusColor()}`}>{connected}</span>
@@ -167,8 +171,8 @@ const Send = () => {
           {statusMessage && (
             <div
               className={`mt-2 text-sm ${
-                statusMessage.includes("sent") || statusMessage.includes("Message sent") 
-                  ? "text-green-500" 
+                statusMessage.includes("sent") || statusMessage.includes("Message sent")
+                  ? "text-green-500"
                   : "text-red-500"
               }`}
             >
@@ -176,16 +180,16 @@ const Send = () => {
             </div>
           )}
         </div>
-
+  
         {/* Text and File Input Sections */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Text Message Section */}
-          <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
+          <div className="bg-gray-800 p-4 sm:p-6 rounded-lg shadow-lg">
             <h2 className="text-lg font-semibold mb-4">Send Text Message</h2>
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
+              onKeyDown={handleKeyPress}
               placeholder="Type your message (Ctrl+Enter to send)"
               rows={4}
               className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
@@ -198,9 +202,9 @@ const Send = () => {
               Send Message
             </button>
           </div>
-
+  
           {/* File Input Section */}
-          <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
+          <div className="bg-gray-800 p-4 sm:p-6 rounded-lg shadow-lg">
             <h2 className="text-lg font-semibold mb-4">Send File</h2>
             <input
               type="file"
@@ -225,6 +229,6 @@ const Send = () => {
       </div>
     </div>
   );
-};
+}
 
 export default Send;
