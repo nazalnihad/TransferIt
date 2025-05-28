@@ -146,12 +146,12 @@ const Receive = () => {
               {copyStatus || "Copy ID"}
             </button>
             </div>
-            <QRCode
+            {peer && peer !== 'Connecting...' && (<QRCode
             size={64}
             style={{ height: "auto", maxWidth: "40%", width: "40%" }}
-            value={'HI'}
+            value={peer}
             viewBox={`0 0 256 256`}
-            level={'L'}/>
+            level={'L'}/>)}
             
           </div>
           <div className="mt-2 text-sm">
