@@ -2,6 +2,7 @@ import React from "react";
 import { Peer } from "peerjs";
 import { useState, useEffect, useRef } from "react";
 import QRCode from "react-qr-code";
+import { GenerateRandomId } from "../utils/GenerateRandomId";
 
 const Receive = () => {
   const [peer, setPeer] = useState("Connecting...");
@@ -10,12 +11,14 @@ const Receive = () => {
   const [messageCopyStatus, setMessageCopyStatus] = useState("");
   const [connectionStatus, setConnectionStatus] = useState("Not connected");
   const [files, setFiles] = useState([]);
+  const [receiveProgress, setReceiveProgress] = useState({}); // New state for progress per file
 
-  const pendingFiles = useRef(null);
+  const pendingFiles = useRef({});
   const peerRef = useRef(null);
 
   useEffect(() => {
-    peerRef.current = new Peer();
+    const peerId = GenerateRandomId();
+    peerRef.current = new Peer(peerId);
 
     peerRef.current.on("open", (id) => {
       console.log("My peer ID is: " + id);
@@ -30,36 +33,46 @@ const Receive = () => {
         console.log("Received data:", data);
         
         // Handle file metadata
-        if (typeof data === "object" && data.type === "file") {
-          pendingFiles.current = {
+        if (typeof data === "object" && data.type === "fileMetadata") {
+          pendingFiles.current[data.fileId] = {
             name: data.name,
             size: data.size,
             mimeType: data.mimeType,
+            totalChunks: data.totalChunks,
+            chunks: [],
+            receivedBytes: 0,
           };
+          setReceiveProgress((prev) => ({
+            ...prev,
+            [data.fileId]: 0,
+          }));
         }
-        // Handle file data (new format from Send component)
-        else if (typeof data === "object" && data.type === "fileData" && data.data) {
-          const blob = new Blob([data.data], { type: pendingFiles.current?.mimeType || 'application/octet-stream' });
-          const url = URL.createObjectURL(blob);
-          setFiles((prevFiles) => [
-            ...prevFiles,
-            { 
-              name: data.name || pendingFiles.current?.name || 'Unknown file', 
-              url, 
-              size: pendingFiles.current?.size || data.data.byteLength 
-            },
-          ]);
-          pendingFiles.current = null;
-        }
-        // Handle direct ArrayBuffer (fallback)
-        else if (pendingFiles.current && data instanceof ArrayBuffer) {
-          const blob = new Blob([data], { type: pendingFiles.current.mimeType });
-          const url = URL.createObjectURL(blob);
-          setFiles((prevFiles) => [
-            ...prevFiles,
-            { name: pendingFiles.current.name, url, size: pendingFiles.current.size },
-          ]);
-          pendingFiles.current = null;
+        // Handle file chunk
+        else if (typeof data === "object" && data.type === "fileChunk" && data.data) {
+          const fileInfo = pendingFiles.current[data.fileId];
+          if (fileInfo) {
+            fileInfo.chunks.push(data.data);
+            fileInfo.receivedBytes += data.data.byteLength;
+            setReceiveProgress((prev) => ({
+              ...prev,
+              [data.fileId]: (fileInfo.receivedBytes / fileInfo.size) * 100,
+            }));
+
+            if (fileInfo.chunks.length === fileInfo.totalChunks) {
+              const blob = new Blob(fileInfo.chunks, { type: fileInfo.mimeType });
+              const url = URL.createObjectURL(blob);
+              setFiles((prevFiles) => [
+                ...prevFiles,
+                { name: fileInfo.name, url, size: fileInfo.size },
+              ]);
+              setReceiveProgress((prev) => {
+                const newProgress = { ...prev };
+                delete newProgress[data.fileId];
+                return newProgress;
+              });
+              delete pendingFiles.current[data.fileId];
+            }
+          }
         }
         // Handle text messages
         else if (typeof data === "string") {
@@ -75,6 +88,7 @@ const Receive = () => {
       conn.on("close", () => {
         console.log("Connection closed by: " + conn.peer);
         setConnectionStatus("Not connected");
+        setReceiveProgress({}); // Reset progress on disconnect
       });
     });
 
@@ -83,29 +97,32 @@ const Receive = () => {
     };
   }, []);
 
-  const copyToClipboard = async () => {
+  const copyText = async (text, setStatus) => {
     try {
-      await navigator.clipboard.writeText(peer);
-      setCopyStatus("Copied!");
-      setTimeout(() => setCopyStatus(""), 2000);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+  
+        const successful = document.execCommand("copy");
+        if (!successful) throw new Error("execCommand failed");
+  
+        document.body.removeChild(textArea);
+      }
+  
+      setStatus("Copied!");
     } catch (err) {
       console.error("Failed to copy: ", err);
-      setCopyStatus("Failed to copy");
-      setTimeout(() => setCopyStatus(""), 2000);
+      setStatus("Failed to copy");
     }
-  };
-
-  const copyMessage = async () => {
-    try {
-      await navigator.clipboard.writeText(message);
-      setMessageCopyStatus("Copied!");
-      setTimeout(() => setMessageCopyStatus(""), 2000);
-    } catch (err) {
-      console.error("Failed to copy message: ", err);
-      setMessageCopyStatus("Failed to copy");
-      setTimeout(() => setMessageCopyStatus(""), 2000);
-    }
-  };
+  
+    setTimeout(() => setStatus(""), 2000);
+  };  
 
   const downloadFile = (file) => {
     const a = document.createElement('a');
@@ -131,28 +148,30 @@ const Receive = () => {
         <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
           <h1 className="text-2xl font-bold mb-4">Receive Files & Messages</h1>
           <div className="flex flex-col items-center gap-4">
-            <div>
-            <span className="text-sm m-2">Your ID:</span>
-            <input
-              type="text"
-              value={peer}
-              readOnly
-              className="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-300 cursor-not-allowed"
-            />
-            <button
-              onClick={copyToClipboard}
-              className="px-4 m-2 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors relative"
-            >
+            <div className="flex w-3/5 items-center gap-2">
+              <span className="text-sm">Your ID:</span>
+              <input
+                type="text"
+                value={peer}
+                readOnly
+                className="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-300 cursor-not-allowed m-2"
+              />
+              <button
+              onClick={() => copyText(peer, setCopyStatus)}
+              className="px-4 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors relative">
               {copyStatus || "Copy ID"}
-            </button>
+              </button>
             </div>
-            {peer && peer !== 'Connecting...' && (<QRCode
-            size={64}
-            style={{ height: "auto", maxWidth: "40%", width: "40%" }}
-            value={peer}
-            viewBox={`0 0 256 256`}
-            level={'L'}/>)}
-            
+            {peer && peer !== 'Connecting...' && (
+              <QRCode
+                size={64}
+                style={{ height: "auto", maxWidth: "40%", width: "40%" }}
+                value={peer}
+                viewBox={`0 0 256 256`}
+                level={'L'}
+                className="p-2 bg-white rounded-lg border border-gray-300 shadow-md"
+              />
+            )}
           </div>
           <div className="mt-2 text-sm">
             Status:{" "}
@@ -178,12 +197,10 @@ const Receive = () => {
               <h2 className="text-lg font-semibold">Messages</h2>
               {message && (
                 <button
-                  onClick={copyMessage}
-                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-sm transition-colors"
-                >
-                  {messageCopyStatus || "Copy"}
-                </button>
-              )}
+                onClick={() => copyText(message, setMessageCopyStatus)}
+                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-sm transition-colors">
+                {messageCopyStatus || "Copy"}
+                </button>)}
             </div>
             <div className="p-3 bg-gray-700 border border-gray-600 rounded-lg min-h-[100px]">
               {message ? (
@@ -198,8 +215,24 @@ const Receive = () => {
           <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
             <h2 className="text-lg font-semibold mb-4">Files ({files.length})</h2>
             <div className="p-3 bg-gray-700 border border-gray-600 rounded-lg min-h-[100px] max-h-[300px] overflow-y-auto">
-              {files.length > 0 ? (
+              {files.length > 0 || Object.keys(receiveProgress).length > 0 ? (
                 <div className="space-y-3">
+                  {Object.keys(receiveProgress).map((fileId) => (
+                    <div key={fileId} className="p-3 bg-gray-600 rounded-lg">
+                      <p className="text-sm font-medium text-gray-200 truncate">
+                        Receiving: {pendingFiles.current[fileId]?.name || 'Unknown file'}
+                      </p>
+                      <div className="w-full bg-gray-600 rounded-full h-2.5 mt-2">
+                        <div
+                          className="bg-indigo-600 h-2.5 rounded-full"
+                          style={{ width: `${receiveProgress[fileId]}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Progress: {receiveProgress[fileId].toFixed(2)}%
+                      </p>
+                    </div>
+                  ))}
                   {files.map((file, index) => (
                     <div key={index} className="flex items-center justify-between p-3 bg-gray-600 rounded-lg">
                       <div className="flex-1 min-w-0">

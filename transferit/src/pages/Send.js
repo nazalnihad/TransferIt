@@ -2,6 +2,7 @@ import React from "react";
 import { Peer } from "peerjs";
 import { useState, useEffect, useRef } from "react";
 import QRScanner from "../utils/QRScanner";
+import { GenerateRandomId } from "../utils/GenerateRandomId";
 
 const Send = () => {
   const [peer, setPeer] = useState("Connecting...");
@@ -10,12 +11,15 @@ const Send = () => {
   const [message, setMessage] = useState("");
   const [file, setFile] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
+  const [progress, setProgress] = useState(0); // New state for progress
 
   const connectionRef = useRef(null);
   const peerRef = useRef(null);
+  
 
   useEffect(() => {
-    peerRef.current = new Peer();
+    const peerId = GenerateRandomId();
+    peerRef.current = new Peer(peerId);
     peerRef.current.on("open", (id) => {
       console.log("My peer ID is: " + id);
       setPeer(id);
@@ -31,18 +35,32 @@ const Send = () => {
       const conn = peerRef.current.connect(receiverId);
       connectionRef.current = conn;
       setConnected("Connecting...");
-      
+  
+      // Set timeout for connection attempt
+      const timeout = setTimeout(() => {
+        if (conn.open === false) {
+          console.warn("Connection timed out");
+          setConnected("Connection timed out");
+          setStatusMessage("Unable to connect. Please check the ID or try again.");
+          conn.close(); // Close connection attempt
+          connectionRef.current = null;
+        }
+      }, 10000); // 10 seconds
+  
       conn.on("open", () => {
+        clearTimeout(timeout); // Clear the timeout on success
         console.log("Connected to " + receiverId);
         setConnected(`Connected to ${receiverId}`);
       });
-      
+  
       conn.on("close", () => {
+        clearTimeout(timeout); // Clear timeout if closed before timeout triggers
         setConnected("Connection lost");
         connectionRef.current = null;
       });
-      
+  
       conn.on("error", (err) => {
+        clearTimeout(timeout);
         console.error("Connection error:", err);
         setConnected("Connection failed");
         connectionRef.current = null;
@@ -54,6 +72,7 @@ const Send = () => {
       setTimeout(() => setStatusMessage(""), 3000);
     }
   };
+  
 
   const sendTextMessage = () => {
     if (!connectionRef.current) {
@@ -72,7 +91,7 @@ const Send = () => {
     }
   };
 
-  const sendFile = () => {
+  const sendFile = async () => {
     if (!connectionRef.current) {
       setStatusMessage("Please connect to a peer first");
       setTimeout(() => setStatusMessage(""), 3000);
@@ -83,37 +102,68 @@ const Send = () => {
       setTimeout(() => setStatusMessage(""), 3000);
       return;
     }
-    
-    // First send file metadata
-    connectionRef.current.send({
-      type: "file",
-      name: file.name,
-      size: file.size,
-      mimeType: file.type,
-    });
-    
-    // Then send file data
+
+    const CHUNK_SIZE = 1024 * 64; // 64kb chunks
     const fileReader = new FileReader();
-    fileReader.onload = () => {
-      connectionRef.current.send({
-        type: "fileData",
-        name: file.name,
-        data: fileReader.result,
-      });
-      setStatusMessage(`File "${file.name}" sent!`);
-      setFile(null);
-      // Reset file input
-      const fileInput = document.querySelector('input[type="file"]');
-      if (fileInput) fileInput.value = '';
-      setTimeout(() => setStatusMessage(""), 3000);
+    let offset = 0;
+    const totalSize = file.size;
+    const fileId = `${file.name}-${Date.now()}`; // Unique ID for this file transfer
+
+    // Send file metadata first
+    connectionRef.current.send({
+      type: "fileMetadata",
+      fileId,
+      name: file.name,
+      size: totalSize,
+      mimeType: file.type,
+      totalChunks: Math.ceil(totalSize / CHUNK_SIZE),
+    });
+
+    const readChunk = () => {
+      const slice = file.slice(offset, offset + CHUNK_SIZE);
+      fileReader.readAsArrayBuffer(slice);
     };
-    
+
+    fileReader.onload = () => {
+      if (!connectionRef.current) {
+        setStatusMessage("Connection lost during transfer");
+        setProgress(0);
+        setFile(null);
+        const fileInput = document.querySelector('input[type="file"]');
+        if (fileInput) fileInput.value = '';
+        setTimeout(() => setStatusMessage(""), 3000);
+        return;
+      }
+
+      connectionRef.current.send({
+        type: "fileChunk",
+        fileId,
+        data: fileReader.result,
+        offset,
+      });
+
+      offset += CHUNK_SIZE;
+      setProgress(Math.min((offset / totalSize) * 100, 100));
+
+      if (offset < totalSize) {
+        readChunk();
+      } else {
+        setStatusMessage(`File "${file.name}" sent!`);
+        setProgress(0);
+        setFile(null);
+        const fileInput = document.querySelector('input[type="file"]');
+        if (fileInput) fileInput.value = '';
+        setTimeout(() => setStatusMessage(""), 3000);
+      }
+    };
+
     fileReader.onerror = () => {
       setStatusMessage("Failed to read file");
+      setProgress(0);
       setTimeout(() => setStatusMessage(""), 3000);
     };
-    
-    fileReader.readAsArrayBuffer(file);
+
+    readChunk();
   };
 
   const handleKeyPress = (e) => {
@@ -215,6 +265,19 @@ const Send = () => {
               <div className="mt-3 p-3 bg-gray-700 rounded-lg">
                 <p className="text-sm text-gray-300">Selected: {file.name}</p>
                 <p className="text-xs text-gray-400">Size: {formatFileSize(file.size)}</p>
+              </div>
+            )}
+            {progress > 0 && (
+              <div className="mt-3">
+                <div className="w-full bg-gray-600 rounded-full h-2.5">
+                  <div
+                    className="bg-indigo-600 h-2.5 rounded-full"
+                    style={{ width: `${progress}%` }}
+                  ></div>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  Progress: {progress.toFixed(2)}%
+                </p>
               </div>
             )}
             <button
