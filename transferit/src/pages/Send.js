@@ -11,7 +11,7 @@ const Send = () => {
   const [message, setMessage] = useState("");
   const [file, setFile] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
-  const [progress, setProgress] = useState(0); // New state for progress
+  const [progress, setProgress] = useState(0); 
 
   const connectionRef = useRef(null);
   const peerRef = useRef(null);
@@ -36,7 +36,7 @@ const Send = () => {
       connectionRef.current = conn;
       setConnected("Connecting...");
   
-      // Set timeout for connection attempt
+      //  timeout for connection attempt
       const timeout = setTimeout(() => {
         if (conn.open === false) {
           console.warn("Connection timed out");
@@ -48,13 +48,13 @@ const Send = () => {
       }, 10000); // 10 seconds
   
       conn.on("open", () => {
-        clearTimeout(timeout); // Clear the timeout on success
+        clearTimeout(timeout); 
         console.log("Connected to " + receiverId);
         setConnected(`Connected to ${receiverId}`);
       });
   
       conn.on("close", () => {
-        clearTimeout(timeout); // Clear timeout if closed before timeout triggers
+        clearTimeout(timeout); 
         setConnected("Connection lost");
         connectionRef.current = null;
       });
