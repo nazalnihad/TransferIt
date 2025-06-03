@@ -1,6 +1,6 @@
 import './App.css';
 import React from 'react';
-import {BrowserRouter as Router, Route, Routes, Link, useLocation} from 'react-router-dom';
+import {HashRouter as Router, Route, Routes, Link, useLocation} from 'react-router-dom';
 import Send from './pages/Send';
 import Recieve from './pages/Recieve';
 import './index.css';
