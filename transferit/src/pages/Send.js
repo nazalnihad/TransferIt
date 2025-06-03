@@ -11,11 +11,11 @@ const Send = () => {
   const [message, setMessage] = useState("");
   const [file, setFile] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
-  const [progress, setProgress] = useState(0); 
+  const [progress, setProgress] = useState(0);
 
   const connectionRef = useRef(null);
   const peerRef = useRef(null);
-  
+  const textareaRef = useRef(null);
 
   useEffect(() => {
     const peerId = GenerateRandomId();
@@ -30,35 +30,45 @@ const Send = () => {
     };
   }, []);
 
+  useEffect(() => {
+    // Dynamically resize textarea based on content
+    const textarea = textareaRef.current;
+    if (textarea) {
+      // Reset height to auto to get accurate scrollHeight
+      textarea.style.height = "auto";
+      // Set height to scrollHeight, but cap at max-height (via CSS)
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 300)}px`; // 300px max height
+    }
+  }, [message]);
+
   const handleConnect = () => {
     if (receiverId) {
       const conn = peerRef.current.connect(receiverId);
       connectionRef.current = conn;
       setConnected("Connecting...");
-  
-      //  timeout for connection attempt
+
       const timeout = setTimeout(() => {
         if (conn.open === false) {
           console.warn("Connection timed out");
           setConnected("Connection timed out");
           setStatusMessage("Unable to connect. Please check the ID or try again.");
-          conn.close(); // Close connection attempt
+          conn.close();
           connectionRef.current = null;
         }
-      }, 10000); // 10 seconds
-  
+      }, 10000);
+
       conn.on("open", () => {
-        clearTimeout(timeout); 
+        clearTimeout(timeout);
         console.log("Connected to " + receiverId);
         setConnected(`Connected to ${receiverId}`);
       });
-  
+
       conn.on("close", () => {
-        clearTimeout(timeout); 
+        clearTimeout(timeout);
         setConnected("Connection lost");
         connectionRef.current = null;
       });
-  
+
       conn.on("error", (err) => {
         clearTimeout(timeout);
         console.error("Connection error:", err);
@@ -72,7 +82,6 @@ const Send = () => {
       setTimeout(() => setStatusMessage(""), 3000);
     }
   };
-  
 
   const sendTextMessage = () => {
     if (!connectionRef.current) {
@@ -107,9 +116,8 @@ const Send = () => {
     const fileReader = new FileReader();
     let offset = 0;
     const totalSize = file.size;
-    const fileId = `${file.name}-${Date.now()}`; // Unique ID for this file transfer
+    const fileId = `${file.name}-${Date.now()}`;
 
-    // Send file metadata first
     connectionRef.current.send({
       type: "fileMetadata",
       fileId,
@@ -188,110 +196,130 @@ const Send = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-4">
-      <div className="w-full max-w-3xl space-y-6">
-        {/* Connection Section */}
-        <div className="bg-gray-800 p-4 sm:p-6 rounded-lg shadow-lg">
-          <h1 className="text-2xl font-bold mb-4">Send Files & Messages</h1>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4 space-y-4 sm:space-y-0">
-            <input
-              type="text"
-              value={receiverId}
-              onChange={(e) => setReceiverId(e.target.value)}
-              placeholder="Enter receiver's peer ID"
-              className="w-full sm:flex-1 p-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
-            />
-            <button
-              onClick={handleConnect}
-              className="w-full sm:w-auto px-4 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
-            >
-              Connect
-            </button>
-            <div className="w-full sm:w-auto">
-              <QRScanner onScan={(data) => setReceiverId(data)} />
-            </div>
-          </div>
-          <div className="mt-4 text-sm">
-            Your ID: <span className="font-mono break-all">{peer}</span>
-          </div>
-          <div className="mt-2 text-sm">
-            Status: <span className={`font-mono ${getStatusColor()}`}>{connected}</span>
-          </div>
-          {statusMessage && (
-            <div
-              className={`mt-2 text-sm ${
-                statusMessage.includes("sent") || statusMessage.includes("Message sent")
-                  ? "text-green-500"
-                  : "text-red-500"
-              }`}
-            >
-              {statusMessage}
-            </div>
-          )}
+    <div className="min-h-screen bg-gray-900 text-white p-4">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+            Send Files & Messages
+          </h1>
         </div>
   
-        {/* Text and File Input Sections */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Text Message Section */}
-          <div className="bg-gray-800 p-4 sm:p-6 rounded-lg shadow-lg">
-            <h2 className="text-lg font-semibold mb-4">Send Text Message</h2>
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={handleKeyPress}
-              placeholder="Type your message (Ctrl+Enter to send)"
-              rows={4}
-              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-            />
-            <button
-              onClick={sendTextMessage}
-              disabled={!message.trim() || !connectionRef.current}
-              className="mt-4 w-full px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
-            >
-              Send Message
-            </button>
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 h-full">
+          {/* Left Column - Connection and ID */}
+          <div className="xl:col-span-1 space-y-6">
+            <div className="bg-gray-800/80 backdrop-blur-sm border border-gray-700/50 p-6 rounded-xl shadow-2xl">
+              <h2 className="text-lg font-semibold mb-4">Connect to Receiver</h2>
+              
+              {/* Receiver ID and Status row */}
+              <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    value={receiverId}
+                    onChange={(e) => setReceiverId(e.target.value)}
+                    placeholder="Reciever's ID"
+                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
+                  />
+                </div>
+                <div className="flex items-center min-w-fit">
+                  <div className="text-xm">
+                    <div>Status: <span className={`font-mono ${getStatusColor()}`}>{connected}</span></div>
+                    <div>Your ID: <span className="font-mono text-sm break-all">{peer}</span></div>
+                  </div>
+                </div>
+              </div>
+  
+              <button
+                onClick={handleConnect}
+                className="w-full mb-4 px-4 py-3 bg-indigo-600 hover:bg-green-500 rounded-lg transition-colors"
+              >
+                Connect
+              </button>
+
+              <div className="w-full mb-4 px-4 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors">
+                <QRScanner onScan={(data) => setReceiverId(data)} />
+              </div>
+  
+              {statusMessage && (
+                <div
+                  className={`mt-4 text-sm ${
+                    statusMessage.includes("sent") || statusMessage.includes("Message sent")
+                      ? "text-green-500"
+                      : "text-red-500"
+                  }`}
+                >
+                  {statusMessage}
+                </div>
+              )}
+            </div>
           </div>
   
-          {/* File Input Section */}
-          <div className="bg-gray-800 p-4 sm:p-6 rounded-lg shadow-lg">
-            <h2 className="text-lg font-semibold mb-4">Send File</h2>
-            <input
-              type="file"
-              onChange={(e) => setFile(e.target.files[0])}
-              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-600 file:text-white hover:file:bg-indigo-700"
-            />
-            {file && (
-              <div className="mt-3 p-3 bg-gray-700 rounded-lg">
-                <p className="text-sm text-gray-300">Selected: {file.name}</p>
-                <p className="text-xs text-gray-400">Size: {formatFileSize(file.size)}</p>
-              </div>
-            )}
-            {progress > 0 && (
-              <div className="mt-3">
-                <div className="w-full bg-gray-600 rounded-full h-2.5">
-                  <div
-                    className="bg-indigo-600 h-2.5 rounded-full"
-                    style={{ width: `${progress}%` }}
-                  ></div>
+          {/* Right Column - Messages and Files */}
+          <div className="xl:col-span-2 grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+            {/* Messages Section */}
+            <div className="bg-gray-800/80 backdrop-blur-sm border border-gray-700/50 p-6 rounded-xl shadow-2xl flex flex-col">
+              <h2 className="text-lg font-semibold mb-4">Send Text Message</h2>
+              <textarea
+                ref={textareaRef}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyDown={handleKeyPress}
+                placeholder="Type your message (Ctrl+Enter to send)"
+                className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                style={{ minHeight: '100px', maxHeight: '300px', overflowY: 'auto' }}
+              />
+              <button
+                onClick={sendTextMessage}
+                disabled={!message.trim() || !connectionRef.current}
+                className="mt-4 w-full px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+              >
+                Send Message
+              </button>
+            </div>
+  
+            {/* Files Section */}
+            <div className="bg-gray-800/80 backdrop-blur-sm border border-gray-700/50 p-6 rounded-xl shadow-2xl flex flex-col">
+              <h2 className="text-lg font-semibold mb-4">Send File</h2>
+              <input
+                type="file"
+                onChange={(e) => setFile(e.target.files[0])}
+                className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-600 file:text-white hover:file:bg-indigo-700"
+              />
+              {file && (
+                <div className="mt-3 p-3 bg-gray-700 rounded-lg">
+                  <p className="text-sm text-gray-300">Selected: {file.name}</p>
+                  <p className="text-xs text-gray-400">Size: {formatFileSize(file.size)}</p>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">
-                  Progress: {progress.toFixed(2)}%
-                </p>
-              </div>
-            )}
-            <button
-              onClick={sendFile}
-              disabled={!file || !connectionRef.current}
-              className="mt-4 w-full px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
-            >
-              Send File
-            </button>
+              )}
+              {progress > 0 && (
+                <div className="mt-3">
+                  <div className="w-full bg-gray-600 rounded-full h-2.5">
+                    <div
+                      className="bg-indigo-600 h-2.5 rounded-full"
+                      style={{ width: `${progress}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Progress: {progress.toFixed(2)}%
+                  </p>
+                </div>
+              )}
+              <button
+                onClick={sendFile}
+                disabled={!file || !connectionRef.current}
+                className="mt-4 w-full px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+              >
+                Send File
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
-}
+};
 
 export default Send;
